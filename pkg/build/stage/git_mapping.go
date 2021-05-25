@@ -418,6 +418,12 @@ func (gm *GitMapping) VirtualMergeIntoCommitLabel() string {
 }
 
 func (gm *GitMapping) baseApplyPatchCommand(ctx context.Context, fromCommit, toCommit string, prevBuiltImage container_runtime.ImageInterface) ([]string, error) {
+	if isNoMatchesByGitAdd, err := gm.isNoMatchesByGitAdd(ctx, toCommit); err != nil {
+		return nil, err
+	} else if isNoMatchesByGitAdd {
+		return nil, fmt.Errorf("git[].add parameter %q matches no files. git[].add parameter requires at least one file matched by it", gm.Add)
+	}
+
 	archiveType := git_repo.ArchiveType(prevBuiltImage.GetStageDescription().Info.Labels[gm.getArchiveTypeLabelName()])
 
 	patchOpts, err := gm.makePatchOptions(ctx, fromCommit, toCommit, false, false)
@@ -504,11 +510,6 @@ func (gm *GitMapping) baseApplyPatchCommand(ctx context.Context, fromCommit, toC
 		archive, err := gm.GitRepo().GetOrCreateArchive(ctx, *archiveOpts)
 		if err != nil {
 			return nil, err
-		}
-
-		if archive.IsEmpty() {
-			commands = append(commands, rmEmptyChangedDirsCommands...)
-			return commands, nil
 		}
 
 		archiveFile, err := gm.prepareArchiveFile(archive)
@@ -620,6 +621,12 @@ func (gm *GitMapping) applyScript(image container_runtime.ImageInterface, comman
 }
 
 func (gm *GitMapping) baseApplyArchiveCommand(ctx context.Context, commit string, image container_runtime.ImageInterface) ([]string, error) {
+	if isNoMatchesByGitAdd, err := gm.isNoMatchesByGitAdd(ctx, commit); err != nil {
+		return nil, err
+	} else if isNoMatchesByGitAdd {
+		return nil, fmt.Errorf("git[].add parameter %q matches no files. git[].add parameter requires at least one file matched by it", gm.Add)
+	}
+
 	archiveOpts, err := gm.makeArchiveOptions(ctx, commit)
 	if err != nil {
 		return nil, err
@@ -628,10 +635,6 @@ func (gm *GitMapping) baseApplyArchiveCommand(ctx context.Context, commit string
 	archive, err := gm.GitRepo().GetOrCreateArchive(ctx, *archiveOpts)
 	if err != nil {
 		return nil, err
-	}
-
-	if archive.IsEmpty() {
-		return nil, nil
 	}
 
 	archiveFile, err := gm.prepareArchiveFile(archive)
@@ -841,21 +844,6 @@ func (gm *GitMapping) baseIsPatchEmpty(ctx context.Context, fromCommit, toCommit
 	return patch.IsEmpty(), nil
 }
 
-func (gm *GitMapping) IsEmpty(ctx context.Context, c Conveyor) (bool, error) {
-	commitInfo, err := gm.GetLatestCommitInfo(ctx, c)
-	if err != nil {
-		return false, fmt.Errorf("unable to get latest commit info: %s", err)
-	}
-
-	archiveOpts, err := gm.makeArchiveOptions(ctx, commitInfo.Commit)
-	if err != nil {
-		return false, err
-	}
-
-	archive, err := gm.GitRepo().GetOrCreateArchive(ctx, *archiveOpts)
-	return archive.IsEmpty(), nil
-}
-
 func (gm *GitMapping) prepareArchiveFile(archive git_repo.Archive) (*ContainerFileDescriptor, error) {
 	return &ContainerFileDescriptor{
 		FilePath:          archive.GetFilePath(),
@@ -944,4 +932,18 @@ func (gm *GitMapping) getArchiveType(ctx context.Context, commit string) (git_re
 	}
 
 	return git_repo.FileArchive, nil
+}
+
+func (gm *GitMapping) isNoMatchesByGitAdd(ctx context.Context, commit string) (bool, error) {
+	pathScope, err := gm.getPathScope(ctx, commit)
+	if err != nil {
+		return true, err
+	}
+
+	isNoMatchesByGitAdd, err := gm.GitRepo().IsNoCommitTreeEntriesMatched(ctx, commit, pathScope, gm.getPathMatcher(), true)
+	if err != nil {
+		return true, err
+	}
+
+	return isNoMatchesByGitAdd, nil
 }

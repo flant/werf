@@ -386,7 +386,7 @@ func (repo *Base) createArchive(ctx context.Context, repoPath, gitDir, repoID, w
 		return nil, fmt.Errorf("unable to close file %s: %s", tmpPath, err)
 	}
 
-	isArchiveEmpty, err := repo.IsNoCommitTreeEntriesMatched(ctx, opts.Commit, opts.PathScope, opts.PathMatcher)
+	isArchiveEmpty, err := repo.IsNoCommitTreeEntriesMatched(ctx, opts.Commit, opts.PathScope, opts.PathMatcher, true)
 	if err != nil {
 		return nil, err
 	}
@@ -886,10 +886,11 @@ func (repo *Base) readCommitFile(ctx context.Context, commit, path string) ([]by
 	return repo.ReadCommitTreeEntryContent(ctx, commit, resolvedPath)
 }
 
-func (repo *Base) IsNoCommitTreeEntriesMatched(ctx context.Context, commit string, pathScope string, pathMatcher path_matcher.PathMatcher) (bool, error) {
+func (repo *Base) IsNoCommitTreeEntriesMatched(ctx context.Context, commit string, pathScope string, pathMatcher path_matcher.PathMatcher, allFiles bool) (bool, error) {
 	result, err := repo.lsTreeResult(ctx, commit, LsTreeOptions{
 		PathScope: pathScope,
 		PathMatcher: pathMatcher,
+		AllFiles: allFiles,
 	})
 	if err != nil {
 		return false, err
